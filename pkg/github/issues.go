@@ -220,6 +220,60 @@ func UpdateIssueComment(getClient GetClientFn, t translations.TranslationHelperF
 		}
 }
 
+// DeleteIssueComment creates a tool to delete a comment on an issue.
+func DeleteIssueComment(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+	return mcp.NewTool("delete_issue_comment",
+			mcp.WithDescription(t("TOOL_DELETE_ISSUE_COMMENT_DESCRIPTION", "Delete a comment on an issue")),
+			mcp.WithString("owner",
+				mcp.Required(),
+				mcp.Description("Repository owner"),
+			),
+			mcp.WithString("repo",
+				mcp.Required(),
+				mcp.Description("Repository name"),
+			),
+			mcp.WithNumber("commentId",
+				mcp.Required(),
+				mcp.Description("Comment ID to delete"),
+			),
+		),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			owner, err := requiredParam[string](request, "owner")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			repo, err := requiredParam[string](request, "repo")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			commentID, err := RequiredInt(request, "commentId")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			client, err := getClient(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get GitHub client: %w", err)
+			}
+			resp, err := client.Issues.DeleteComment(ctx, owner, repo, int64(commentID))
+			if err != nil {
+				return nil, fmt.Errorf("failed to delete issue comment: %w", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusNoContent {
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read response body: %w", err)
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("failed to delete issue comment: %s", string(body))), nil
+			}
+
+			return mcp.NewToolResultText("Comment deleted successfully"), nil
+		}
+}
+
+
 // SearchIssues creates a tool to search for issues and pull requests.
 func SearchIssues(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("search_issues",

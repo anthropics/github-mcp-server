@@ -2052,3 +2052,87 @@ func Test_UpdatePullRequestComment(t *testing.T) {
 		})
 	}
 }
+
+func Test_DeletePullRequestComment(t *testing.T) {
+	// Verify tool definition once
+	mockClient := github.NewClient(nil)
+	tool, _ := DeletePullRequestComment(stubGetClientFn(mockClient), translations.NullTranslationHelper)
+
+	assert.Equal(t, "delete_pull_request_comment", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.Contains(t, tool.InputSchema.Properties, "owner")
+	assert.Contains(t, tool.InputSchema.Properties, "repo")
+	assert.Contains(t, tool.InputSchema.Properties, "commentId")
+	assert.ElementsMatch(t, tool.InputSchema.Required, []string{"owner", "repo", "commentId"})
+
+	tests := []struct {
+		name           string
+		mockedClient   *http.Client
+		requestArgs    map[string]interface{}
+		expectError    bool
+		expectedResult string
+		expectedErrMsg string
+	}{
+		{
+			name: "successful comment deletion",
+			mockedClient: mock.NewMockedHTTPClient(
+				mock.WithRequestMatch(
+					mock.DeleteReposPullsCommentsByOwnerByRepoByCommentId,
+					nil,
+				),
+			),
+			requestArgs: map[string]interface{}{
+				"owner":     "owner",
+				"repo":      "repo",
+				"commentId": float64(456),
+			},
+			expectError:    false,
+			expectedResult: "Comment deleted successfully",
+		},
+		{
+			name: "comment deletion fails - not found",
+			mockedClient: mock.NewMockedHTTPClient(
+				mock.WithRequestMatchHandler(
+					mock.DeleteReposPullsCommentsByOwnerByRepoByCommentId,
+					http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						w.WriteHeader(http.StatusNotFound)
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = w.Write([]byte(`{"message": "Comment not found"}`))
+					}),
+				),
+			),
+			requestArgs: map[string]interface{}{
+				"owner":     "owner",
+				"repo":      "repo",
+				"commentId": float64(999),
+			},
+			expectError:    true,
+			expectedErrMsg: "failed to delete pull request comment",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := github.NewClient(tc.mockedClient)
+			_, handler := DeletePullRequestComment(stubGetClientFn(client), translations.NullTranslationHelper)
+
+			request := createMCPRequest(tc.requestArgs)
+
+			result, err := handler(context.Background(), request)
+
+			if tc.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.expectedErrMsg)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.NotNil(t, result)
+			require.Len(t, result.Content, 1)
+
+			textContent := getTextResult(t, result)
+			assert.Equal(t, tc.expectedResult, textContent.Text)
+		})
+	}
+}
+

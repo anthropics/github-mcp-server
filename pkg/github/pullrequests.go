@@ -1202,6 +1202,60 @@ func UpdatePullRequestComment(getClient GetClientFn, t translations.TranslationH
 		}
 }
 
+// DeletePullRequestComment creates a tool to delete a review comment on a pull request.
+func DeletePullRequestComment(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+	return mcp.NewTool("delete_pull_request_comment",
+			mcp.WithDescription(t("TOOL_DELETE_PULL_REQUEST_COMMENT_DESCRIPTION", "Delete a review comment on a pull request")),
+			mcp.WithString("owner",
+				mcp.Required(),
+				mcp.Description("Repository owner"),
+			),
+			mcp.WithString("repo",
+				mcp.Required(),
+				mcp.Description("Repository name"),
+			),
+			mcp.WithNumber("commentId",
+				mcp.Required(),
+				mcp.Description("Comment ID to delete"),
+			),
+		),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			owner, err := requiredParam[string](request, "owner")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			repo, err := requiredParam[string](request, "repo")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			commentID, err := RequiredInt(request, "commentId")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			client, err := getClient(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get GitHub client: %w", err)
+			}
+			resp, err := client.PullRequests.DeleteComment(ctx, owner, repo, int64(commentID))
+			if err != nil {
+				return nil, fmt.Errorf("failed to delete pull request comment: %w", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusNoContent {
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read response body: %w", err)
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("failed to delete pull request comment: %s", string(body))), nil
+			}
+
+			return mcp.NewToolResultText("Comment deleted successfully"), nil
+		}
+}
+
+
 // CreatePullRequest creates a tool to create a new pull request.
 func CreatePullRequest(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("create_pull_request",

@@ -50,6 +50,7 @@ func InitToolsets(passedToolsets []string, readOnly bool, getClient GetClientFn,
 			toolsets.NewServerTool(AddIssueComment(getClient, t)),
 			toolsets.NewServerTool(UpdateIssue(getClient, t)),
 			toolsets.NewServerTool(UpdateIssueComment(getClient, t)),
+			toolsets.NewServerTool(DeleteIssueComment(getClient, t)),
 		)
 	users := toolsets.NewToolset("users", "GitHub User related tools").
 		AddReadTools(
@@ -72,6 +73,7 @@ func InitToolsets(passedToolsets []string, readOnly bool, getClient GetClientFn,
 			toolsets.NewServerTool(UpdatePullRequest(getClient, t)),
 			toolsets.NewServerTool(AddPullRequestReviewComment(getClient, t)),
 			toolsets.NewServerTool(UpdatePullRequestComment(getClient, t)),
+			toolsets.NewServerTool(DeletePullRequestComment(getClient, t)),
 		)
 	codeSecurity := toolsets.NewToolset("code_security", "Code security related tools, such as GitHub Code Scanning").
 		AddReadTools(
